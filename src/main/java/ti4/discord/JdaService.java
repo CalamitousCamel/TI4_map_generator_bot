@@ -451,6 +451,7 @@ public class JdaService {
      */
     private static void initializeWhitelistedRoles() {
         // ADMIN ROLES
+        adminRoles.add(jda.getRoleById("1484034758832033934")); // theFaeRelm
         adminRoles.add(jda.getRoleById("943596173896323072")); // Async Primary (Hub)
         adminRoles.add(jda.getRoleById("1090914497352446042")); // Async Secondary (Stroter's Paradise)
         adminRoles.add(jda.getRoleById("1146511484264906814")); // Async Tertiary (Dreadn't)
@@ -499,6 +500,7 @@ public class JdaService {
         // DEVELOPER ROLES
 
         developerRoles.addAll(adminRoles); // admins may also execute developer commands
+        developerRoles.add(jda.getRoleById("1484034941724659762")); // theFaeRealm
         developerRoles.add(jda.getRoleById("947648366056185897")); // Async Primary (Hub)
         developerRoles.add(jda.getRoleById("1090958278479052820")); // Async Secondary (Stroter's Paradise)
         developerRoles.add(jda.getRoleById("1146529125184581733")); // Async Tertiary (Dreadn't)
@@ -539,6 +541,7 @@ public class JdaService {
 
         bothelperRoles.addAll(developerRoles); // developers may also execute bothelper commands
         bothelperRoles.addAll(adminRoles); // admins can also execute bothelper commands
+        bothelperRoles.add(jda.getRoleById("1484035023685288076")); // theFaeRealm
         bothelperRoles.add(jda.getRoleById("1166011604488425482")); // Async Primary (Hub)
         bothelperRoles.add(jda.getRoleById("1090914992301281341")); // Async Secondary (Stroter's Paradise)
         bothelperRoles.add(jda.getRoleById("1146539257725464666")); // Async Tertiary (Dreadn't)
