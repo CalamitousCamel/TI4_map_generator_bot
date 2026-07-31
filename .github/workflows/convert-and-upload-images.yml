@@ -1,9 +1,18 @@
 name: Convert and Upload Images to R2
 
-# Manual-only for now: run via workflow_dispatch to verify one asset uploads correctly
-# to the ti4images R2 bucket before switching this to a push trigger.
 on:
+  push:
+    branches: ["master"]
+    paths:
+      - "src/main/resources/**"
+      - "web_data/**"
+      - "scripts/convert_and_upload_to_s3.py"
+      - "scripts/generate_data.py"
   workflow_dispatch:
+
+concurrency:
+  group: convert-and-upload-images
+  cancel-in-progress: true
 
 jobs:
   convert-and-upload:
