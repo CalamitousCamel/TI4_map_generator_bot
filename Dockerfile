@@ -24,6 +24,7 @@ WORKDIR /app
 RUN apk add --no-cache fontconfig ttf-dejavu
 
 COPY --from=build /opt/app/target/TI4_map_generator_discord_bot-1.0-SNAPSHOT.jar tibot.jar
+COPY src/main/resources /opt/resources
 
 ENV DB_PATH=/opt/STORAGE
 ENV RESOURCE_PATH=/opt/resources
