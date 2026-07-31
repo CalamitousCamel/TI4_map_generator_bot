@@ -1,10 +1,11 @@
 name: Convert and Upload Images to S3
 
+# Disabled on this fork: assumes AWS IAM role
+# arn:aws:iam::412381764112:role/GithubActionsWebsiteRole, whose OIDC trust policy only
+# authorizes upstream's repo, not this fork. Kept for reference / manual reactivation via
+# workflow_dispatch once this fork has its own R2/AWS credentials wired up.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
 
 jobs:
   convert-and-upload:

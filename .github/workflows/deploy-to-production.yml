@@ -1,6 +1,7 @@
+# Disabled on this fork: pushes to ghcr.io/asyncti4/... and SSHes into
+# secrets.HOSTINGER_SSH_* / other upstream-only secrets that aren't set here.
+# Kept for reference / manual reactivation via workflow_dispatch.
 on:
-  push:
-    branches: [ "master" ]
   workflow_dispatch:
 name: BuildAndDeploy
 permissions:
