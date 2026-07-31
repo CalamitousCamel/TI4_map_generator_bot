@@ -3,6 +3,7 @@ package ti4.website;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.Objects;
@@ -22,8 +23,19 @@ public class EgressClientManager {
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
     @Getter
-    private static final S3AsyncClient s3AsyncClient =
-            S3AsyncClient.builder().region(Region.US_EAST_1).build();
+    private static final S3AsyncClient s3AsyncClient = buildS3Client();
+
+    private static S3AsyncClient buildS3Client() {
+        String endpointOverride = System.getenv("S3_ENDPOINT_OVERRIDE");
+        if (endpointOverride == null || endpointOverride.isBlank()) {
+            return S3AsyncClient.builder().region(Region.US_EAST_1).build();
+        }
+        return S3AsyncClient.builder()
+                .region(Region.of("auto"))
+                .endpointOverride(URI.create(endpointOverride))
+                .forcePathStyle(true)
+                .build();
+    }
 
     @Getter
     private static final Properties webProperties;
