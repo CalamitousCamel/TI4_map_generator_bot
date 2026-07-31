@@ -1,9 +1,7 @@
-name: Convert and Upload Images to S3
+name: Convert and Upload Images to R2
 
-# Disabled on this fork: assumes AWS IAM role
-# arn:aws:iam::412381764112:role/GithubActionsWebsiteRole, whose OIDC trust policy only
-# authorizes upstream's repo, not this fork. Kept for reference / manual reactivation via
-# workflow_dispatch once this fork has its own R2/AWS credentials wired up.
+# Manual-only for now: run via workflow_dispatch to verify one asset uploads correctly
+# to the ti4images R2 bucket before switching this to a push trigger.
 on:
   workflow_dispatch:
 
@@ -11,7 +9,6 @@ jobs:
   convert-and-upload:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
 
     steps:
@@ -31,15 +28,13 @@ jobs:
         run: |
           python scripts/generate_data.py all
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::412381764112:role/GithubActionsWebsiteRole
-          aws-region: us-east-1
-
-      - name: Convert and upload images and data to S3
+      - name: Convert and upload images and data to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
         run: |
-          python scripts/convert_and_upload_to_s3.py
+          python scripts/convert_and_upload_to_s3.py --bucket ti4images
 
       - name: Report results
         if: always()

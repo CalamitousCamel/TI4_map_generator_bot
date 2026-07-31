@@ -29,10 +29,10 @@ DEFAULT_BUCKET = "bot-images-asyncti4.com"
 MAX_WORKERS = 10  # Number of concurrent uploads
 
 
-def setup_s3_client():
+def setup_s3_client(endpoint_url=None):
     try:
         session = boto3.Session()
-        s3_client = session.client("s3")
+        s3_client = session.client("s3", endpoint_url=endpoint_url)
         return s3_client
     except NoCredentialsError:
         logger.error("AWS credentials not found. Please configure your credentials.")
@@ -469,6 +469,11 @@ def main():
         action="store_true",
         help="Enable hash checking to detect file changes (default: only check filename existence)",
     )
+    parser.add_argument(
+        "--endpoint-url",
+        default=os.environ.get("R2_ENDPOINT"),
+        help="S3-compatible endpoint URL, e.g. an R2 account endpoint (default: $R2_ENDPOINT, empty = real AWS S3)",
+    )
 
     args = parser.parse_args()
 
@@ -489,10 +494,12 @@ def main():
     if args.prefix:
         logger.info(f"S3 prefix: {args.prefix}")
     logger.info(f"Hash checking: {'enabled' if args.check_hash else 'disabled (filename only)'}")
+    if args.endpoint_url:
+        logger.info(f"S3 endpoint override: {args.endpoint_url}")
 
     try:
         # Initialize S3 client
-        s3_client = setup_s3_client()
+        s3_client = setup_s3_client(args.endpoint_url)
 
         # Check if bucket exists
         if not bucket_exists(s3_client, args.bucket):
