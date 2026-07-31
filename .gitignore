@@ -25,6 +25,7 @@ TI4_map_generator_discord_bot.iml
 .classpath
 runlocally clean.ps1
 runlocally.ps1
+run.secrets.ps1
 *.tar
 *.log
 *test-save.txt
