@@ -114,17 +114,18 @@ public class LeaderInfoService {
         }
 
         List<MessageEmbed> lichEmbeds = new ArrayList<>();
-        if (player.hasLeaderUnlocked("revenantcommander")) {
+        Player lichPoolOwner = game.getRevenantCommanderOwner(player);
+        if (lichPoolOwner != null) {
             for (Player otherPlayer : game.getRealPlayers()) {
-                if (otherPlayer.equals(player) || player.getDebtTokenCount(otherPlayer.getColor(), "lich") < 1) {
+                if (otherPlayer.equals(lichPoolOwner)
+                        || lichPoolOwner.getDebtTokenCount(otherPlayer.getColor(), "lich") < 1) {
                     continue;
                 }
 
-                otherPlayer.getLeaders().stream()
-                        .filter(leader -> Constants.COMMANDER.equals(leader.getType()))
-                        .filter(leader -> leader.getId().contains(otherPlayer.getFaction()))
-                        .findFirst()
-                        .ifPresent(leader -> lichEmbeds.add(leader.getLeaderEmbed(game)));
+                Leader commander = game.getRevenantLichCommander(lichPoolOwner, otherPlayer);
+                if (commander != null) {
+                    lichEmbeds.add(game.getUnlockedLeaderCopy(commander).getLeaderEmbed(game));
+                }
             }
         }
         if (!lichEmbeds.isEmpty()) {

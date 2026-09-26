@@ -4,13 +4,19 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import de.gesundkrank.jskills.Rating;
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion;
@@ -48,8 +54,11 @@ public class MatchmakingRatingEventService {
         boolean onlyTiglGames = event.getOption("tigl_only", Boolean.FALSE, OptionMapping::getAsBoolean);
         boolean showRating = event.getOption("show_my_rating", Boolean.FALSE, OptionMapping::getAsBoolean);
 
-        List<MatchmakingRating> playerRatings = getPlayerRatings(onlyTiglGames, true);
-        sendMessage(event, playerRatings, showRating);
+        List<PlayerEntity> players =
+                playerEntityRepository.findAllWithUsersAndGamesByCompletedNonAllianceGame(onlyTiglGames);
+        List<MatchmakingGame> games = MatchmakingGame.getMatchmakingGames(players);
+        List<MatchmakingRating> playerRatings = TrueSkillMatchmakingRatingService.calculateRatings(games, true);
+        sendMessage(event, playerRatings, games, showRating);
     }
 
     public static long toDisplayRating(BigDecimal rating) {
@@ -66,6 +75,38 @@ public class MatchmakingRatingEventService {
 
     public Map<String, BigDecimal> getConservativePlayerRatings(Set<String> userIds) {
         return filterRatingsByUserIds(getCachedConservativePlayerRatings(), userIds);
+    }
+
+    public Long getAverageDisplayRating(Collection<String> userIds) {
+        if (userIds.isEmpty()) {
+            return null;
+        }
+        return averageDisplayRating(userIds, getConservativePlayerRatings(new HashSet<>(userIds)));
+    }
+
+    public SkillTier getSkillTier(Collection<String> userIds) {
+        if (userIds.isEmpty()) {
+            return null;
+        }
+        Map<String, BigDecimal> ratings = getConservativePlayerRatings(new HashSet<>(userIds));
+        long ratedCount = userIds.stream().filter(ratings::containsKey).count();
+        if (!hasRatedQuorum(userIds.size(), ratedCount)) {
+            return null;
+        }
+        return SkillTier.fromDisplayRating(averageDisplayRating(userIds, ratings));
+    }
+
+    private static boolean hasRatedQuorum(int playerCount, long ratedCount) {
+        return ratedCount * 2 >= playerCount;
+    }
+
+    private long averageDisplayRating(Collection<String> userIds, Map<String, BigDecimal> ratings) {
+        BigDecimal defaultRating = getAverageConservativeRating();
+        BigDecimal average = userIds.stream()
+                .map(userId -> ratings.getOrDefault(userId, defaultRating))
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(userIds.size()), MathContext.DECIMAL64);
+        return toDisplayRating(average);
     }
 
     public BigDecimal getAverageConservativeRating() {
@@ -111,7 +152,10 @@ public class MatchmakingRatingEventService {
     }
 
     private static void sendMessage(
-            SlashCommandInteractionEvent event, List<MatchmakingRating> playerRatings, boolean showRating) {
+            SlashCommandInteractionEvent event,
+            List<MatchmakingRating> playerRatings,
+            List<MatchmakingGame> games,
+            boolean showRating) {
         int maxListSize = Math.min(MAX_LIST_SIZE, playerRatings.size());
         String ratingLabel = "Rating";
         long inactivityCutoff = Instant.now()
@@ -147,6 +191,18 @@ public class MatchmakingRatingEventService {
                 """, maxListSize, ratingLabel.toLowerCase(), toDisplayRating(averageRating));
         stringBuilder.append(formattedString);
 
+        appendBracketDistribution(
+                stringBuilder,
+                "Calibrated players per " + ratingLabel.toLowerCase() + " bracket",
+                "players",
+                playerDisplayRatings(playerRatings));
+        appendActiveCalibrationShare(stringBuilder, games, playerRatings, inactivityCutoff);
+        appendBracketDistribution(
+                stringBuilder,
+                "Games per average-" + ratingLabel.toLowerCase() + " bracket",
+                "games",
+                gameAverageDisplayRatings(games, playerRatings));
+
         playerRatings.stream()
                 .filter(playerRating ->
                         playerRating.userId().equals(event.getUser().getId()))
@@ -156,6 +212,7 @@ public class MatchmakingRatingEventService {
                         stringBuilder.append(String.format(
                                 "\nYour %s is `%d`.",
                                 ratingLabel.toLowerCase(), toDisplayRating(playerRating.rating())));
+                        appendRecentTrend(stringBuilder, playerRating);
                     } else {
                         stringBuilder.append(String.format(
                                 "\nWe are `%.1f%%` of the way to a high confidence in your rating.",
@@ -164,12 +221,149 @@ public class MatchmakingRatingEventService {
                             stringBuilder.append(" We cannot show your rating until it reaches high confidence.");
                         }
                     }
+                    if (showRating) {
+                        appendAverageOpponentRating(
+                                stringBuilder, ratingLabel, playerRating.userId(), games, playerRatings, averageRating);
+                    }
                 });
 
         MessageHelper.sendMessageToThread(
                 (MessageChannelUnion) event.getMessageChannel(),
                 "Player Matchmaking Ratings",
                 stringBuilder.toString());
+    }
+
+    private static void appendRecentTrend(StringBuilder stringBuilder, MatchmakingRating playerRating) {
+        BigDecimal recentRatingDelta = playerRating.recentRatingDelta();
+        if (recentRatingDelta == null) return;
+        stringBuilder.append(String.format(
+                " That is `%+d` over your last %d games.",
+                toDisplayRating(recentRatingDelta), TrueSkillMatchmakingRatingService.RECENT_GAMES_WINDOW));
+    }
+
+    private static void appendAverageOpponentRating(
+            StringBuilder stringBuilder,
+            String ratingLabel,
+            String userId,
+            List<MatchmakingGame> games,
+            List<MatchmakingRating> playerRatings,
+            BigDecimal defaultRating) {
+        Map<String, BigDecimal> ratingByUserId =
+                playerRatings.stream().collect(Collectors.toMap(MatchmakingRating::userId, MatchmakingRating::rating));
+
+        BigDecimal opponentRatingSum = BigDecimal.ZERO;
+        int opponentCount = 0;
+        int gameCount = 0;
+        for (MatchmakingGame game : games) {
+            if (game.players().stream().noneMatch(player -> player.userId().equals(userId))) continue;
+
+            gameCount++;
+            for (MatchmakingPlayer opponent : game.players()) {
+                if (opponent.userId().equals(userId)) continue;
+                opponentRatingSum =
+                        opponentRatingSum.add(ratingByUserId.getOrDefault(opponent.userId(), defaultRating));
+                opponentCount++;
+            }
+        }
+        if (opponentCount == 0) return;
+
+        BigDecimal averageOpponentRating =
+                opponentRatingSum.divide(BigDecimal.valueOf(opponentCount), MathContext.DECIMAL64);
+        stringBuilder.append(String.format(
+                "\nThe average %s of your opponents across your %d games is `%d`.",
+                ratingLabel.toLowerCase(), gameCount, toDisplayRating(averageOpponentRating)));
+    }
+
+    private static void appendActiveCalibrationShare(
+            StringBuilder stringBuilder,
+            List<MatchmakingGame> games,
+            List<MatchmakingRating> playerRatings,
+            long inactivityCutoff) {
+        Set<String> activeUserIds = games.stream()
+                .filter(game -> game.endedDate() >= inactivityCutoff)
+                .flatMap(game -> game.players().stream())
+                .map(MatchmakingPlayer::userId)
+                .collect(Collectors.toSet());
+        if (activeUserIds.isEmpty()) return;
+        long calibratedCount = playerRatings.stream()
+                .filter(playerRating -> activeUserIds.contains(playerRating.userId()))
+                .filter(playerRating -> playerRating.calibrationPercent().compareTo(ONE_HUNDRED) >= 0)
+                .count();
+        stringBuilder.append(String.format(
+                "%.1f%% of players who played in the last %d months are calibrated (%d of %d).\n",
+                100.0 * calibratedCount / activeUserIds.size(),
+                INACTIVITY_MONTHS,
+                calibratedCount,
+                activeUserIds.size()));
+    }
+
+    private static List<Long> playerDisplayRatings(List<MatchmakingRating> playerRatings) {
+        return playerRatings.stream()
+                .filter(playerRating -> playerRating.calibrationPercent().compareTo(ONE_HUNDRED) >= 0)
+                .map(playerRating -> toDisplayRating(playerRating.rating()))
+                .toList();
+    }
+
+    private static List<Long> gameAverageDisplayRatings(
+            List<MatchmakingGame> games, List<MatchmakingRating> playerRatings) {
+        Map<String, BigDecimal> ratingByUserId =
+                playerRatings.stream().collect(Collectors.toMap(MatchmakingRating::userId, MatchmakingRating::rating));
+        List<Long> averageDisplayRatings = new ArrayList<>();
+        for (MatchmakingGame game : games) {
+            BigDecimal sum = BigDecimal.ZERO;
+            int ratedPlayers = 0;
+            for (MatchmakingPlayer player : game.players()) {
+                BigDecimal rating = ratingByUserId.get(player.userId());
+                if (rating == null) continue;
+                sum = sum.add(rating);
+                ratedPlayers++;
+            }
+            if (ratedPlayers == 0) continue;
+            BigDecimal averageRating = sum.divide(BigDecimal.valueOf(ratedPlayers), java.math.MathContext.DECIMAL64);
+            averageDisplayRatings.add(toDisplayRating(averageRating));
+        }
+        return averageDisplayRatings;
+    }
+
+    private static Map<Long, Long> bucketByBracket(List<Long> displayRatings) {
+        Map<Long, Long> counts = new TreeMap<>(Comparator.reverseOrder());
+        for (long displayRating : displayRatings) {
+            counts.merge(bracketFor(displayRating), 1L, Long::sum);
+        }
+        return counts;
+    }
+
+    private static long bracketFor(long displayRating) {
+        return Math.floorDiv(displayRating, 100) * 100;
+    }
+
+    private static void appendBracketDistribution(
+            StringBuilder stringBuilder, String heading, String unitLabel, List<Long> displayRatings) {
+        if (displayRatings.isEmpty()) return;
+        Map<Long, Long> countsByBracket = bucketByBracket(displayRatings);
+        long total = displayRatings.size();
+        stringBuilder.append("\n**").append(heading).append(":**\n");
+        for (Map.Entry<Long, Long> entry : countsByBracket.entrySet()) {
+            long bracket = entry.getKey();
+            long count = entry.getValue();
+            String separator = bracket < 0 ? " to " : "-";
+            String label = count == 1 ? unitLabel.substring(0, unitLabel.length() - 1) : unitLabel;
+            double percent = 100.0 * count / total;
+            stringBuilder.append(String.format(
+                    "- `%d%s%d`: %d %s (%.1f%%)\n", bracket, separator, bracket + 99, count, label, percent));
+        }
+        stringBuilder.append(String.format(
+                "%s %s\n",
+                describeTierShare(SkillTier.LOWER, unitLabel, displayRatings),
+                describeTierShare(SkillTier.HIGHER, unitLabel, displayRatings)));
+    }
+
+    private static String describeTierShare(SkillTier skillTier, String unitLabel, List<Long> displayRatings) {
+        long inTier = displayRatings.stream().filter(skillTier::contains).count();
+        double percent = 100.0 * inTier / displayRatings.size();
+        return String.format(
+                "%.1f%% of %s are in the %s tier (%s).",
+                percent, unitLabel, skillTier.getDisplayName(), skillTier.getLabel());
     }
 
     public static MatchmakingRatingEventService get() {

@@ -8,6 +8,7 @@ import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.events.interaction.GenericInteractionCreateEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import ti4.discord.interactions.buttons.Buttons;
+import ti4.discord.interactions.buttons.handlers.unit.monuments.MonumentsPoKButtonHandler;
 import ti4.discord.interactions.routing.ButtonHandler;
 import ti4.game.Game;
 import ti4.game.Player;
@@ -27,6 +28,7 @@ import ti4.service.unit.RemoveUnitService.RemovedUnit;
 
 @UtilityClass
 public class AeternaAbilityHandler {
+    private static final String CYCLE_ACTION_CAPTURE = "cycleOfReclamationActionCapture_";
     private static final String FULL_MOON = "full_moonphase";
     private static final String WAXING_MOON = "waxing_moonphase";
     private static final String WANING_MOON = "waning_moonphase";
@@ -137,7 +139,29 @@ public class AeternaAbilityHandler {
     public static void chooseFullMoonStructurePlanet(
             ButtonInteractionEvent event, Game game, Player player, String buttonID) {
         String structure = buttonID.substring("fullMoonStructure_".length());
-        if (!List.of("sd", "pds").contains(structure)) return;
+        if (!List.of("sd", "pds", "monument").contains(structure)) return;
+
+        if ("monument".equals(structure)) {
+            if (!game.isMonumentsMode() || player.getUnitByBaseType("monument") == null) {
+                return;
+            }
+            List<Button> buttons =
+                    Helper.getPlanetPlaceUnitButtons(player, game, "monument", "placeOneNDone_skipbuild");
+            if (buttons.isEmpty() && player.hasUnit("empyrean_monument")) {
+                buttons = MonumentsPoKButtonHandler.getPanopticonPlacementButtons(game, player);
+            }
+            if (buttons.isEmpty()) {
+                return;
+            }
+            MessageHelper.sendMessageToChannelWithButtons(
+                    event.getMessageChannel(),
+                    player.hasUnit("empyrean_monument")
+                            ? "Please choose the empty system in which to place _The Panopticon_ in space."
+                            : "Please choose a planet on which to place the structure.",
+                    buttons);
+            ButtonHelper.deleteMessage(event);
+            return;
+        }
 
         List<Button> buttons = player.getPlanets().stream()
                 .filter(planet -> game.getUnitHolderFromPlanet(planet) != null)
@@ -270,16 +294,32 @@ public class AeternaAbilityHandler {
             GenericInteractionCreateEvent event, Game game, List<RemovedUnit> destroyedUnits, boolean combat) {
         if (destroyedUnits.isEmpty()) return;
         for (Player aeterna : game.getRealPlayers()) {
-            if (!aeterna.hasAbility("cycle_of_reclamation") || (combat && aeterna == game.getActivePlayer())) continue;
+            boolean duringAeternasTacticalAction = aeterna == game.getActivePlayer()
+                    && !game.getCurrentActiveSystem().isEmpty();
+            if (!aeterna.hasAbility("cycle_of_reclamation") || duringAeternasTacticalAction) continue;
+            String actionCaptureKey = CYCLE_ACTION_CAPTURE + aeterna.getFaction();
+            if (!game.getPhaseOfGame().startsWith("agenda")
+                    && !game.getStoredValue(actionCaptureKey).isEmpty()) {
+                continue;
+            }
             boolean nearby =
                     destroyedUnits.stream().anyMatch(unit -> isInOrAdjacentToAeternaUnits(game, aeterna, unit));
             if (!nearby) continue;
 
+            if (!game.getPhaseOfGame().startsWith("agenda")) {
+                game.setStoredValue(actionCaptureKey, "used");
+            }
             AddUnitService.addUnits(
                     event, aeterna.getNomboxTile(), game, game.getNeutral().getColor(), "1 destroyer");
             MessageHelper.sendMessageToChannel(
                     aeterna.getCorrectChannel(),
                     aeterna.getRepresentation() + " captured 1 neutral destroyer with **Cycle of Reclamation**.");
+        }
+    }
+
+    public static void clearCycleOfReclamationActionCaptures(Game game) {
+        for (Player player : game.getRealPlayers()) {
+            game.removeStoredValue(CYCLE_ACTION_CAPTURE + player.getFaction());
         }
     }
 
@@ -303,13 +343,22 @@ public class AeternaAbilityHandler {
     private static void resolveMoonReturnEffect(ButtonInteractionEvent event, Game game, Player player, String relic) {
         switch (relic) {
             case FULL_MOON -> {
+                List<Button> buttons = new ArrayList<>(List.of(
+                        Buttons.green(player.factionButtonChecker() + "fullMoonStructure_sd", "Place 1 Space Dock"),
+                        Buttons.green(player.factionButtonChecker() + "fullMoonStructure_pds", "Place 1 PDS")));
+                if (game.isMonumentsMode()
+                        && player.getUnitByBaseType("monument") != null
+                        && (!Helper.getPlanetPlaceUnitButtons(player, game, "monument", "placeOneNDone_skipbuild")
+                                        .isEmpty()
+                                || !MonumentsPoKButtonHandler.getPanopticonPlacementButtons(game, player)
+                                        .isEmpty())) {
+                    buttons.add(Buttons.green(
+                            player.factionButtonChecker() + "fullMoonStructure_monument", "Place 1 Monument"));
+                }
                 MessageHelper.sendMessageToChannelWithButtons(
                         player.getCorrectChannel(),
                         player.getRepresentation() + ", please choose the structure to place due to _Full Moon_.",
-                        List.of(
-                                Buttons.green(
-                                        player.factionButtonChecker() + "fullMoonStructure_sd", "Place 1 Space Dock"),
-                                Buttons.green(player.factionButtonChecker() + "fullMoonStructure_pds", "Place 1 PDS")));
+                        buttons);
             }
             case WAXING_MOON -> {
                 ActionCardHelper.drawActionCards(player, 2);
@@ -370,9 +419,9 @@ public class AeternaAbilityHandler {
 
     private static int getMoonReturnMinimumCost(String relic) {
         return switch (relic) {
-            case FULL_MOON -> 3;
+            case FULL_MOON -> 4;
             case WAXING_MOON, LUNAR_ECLIPSE -> 2;
-            case WANING_MOON -> 4;
+            case WANING_MOON -> 5;
             default -> 0;
         };
     }
@@ -391,9 +440,16 @@ public class AeternaAbilityHandler {
 
     private static boolean isInOrAdjacentToAeternaUnits(Game game, Player player, RemovedUnit destroyedUnit) {
         Tile tile = destroyedUnit.tile();
-        if (tile.containsPlayersUnits(player) || player.unitBelongsToPlayer(destroyedUnit.unitKey())) return true;
+        UnitModel destroyedUnitModel = player.getUnitFromUnitKey(destroyedUnit.unitKey());
+        if (tile.containsPlayersUnitsWithModelCondition(player, UnitModel::getIsShip)
+                || (player.unitBelongsToPlayer(destroyedUnit.unitKey())
+                        && destroyedUnitModel != null
+                        && destroyedUnitModel.getIsShip())) {
+            return true;
+        }
         return FoWHelper.getAdjacentTiles(game, tile.getPosition(), player, false, true).stream()
                 .map(game::getTileByPosition)
-                .anyMatch(adjacent -> adjacent != null && adjacent.containsPlayersUnits(player));
+                .anyMatch(adjacent -> adjacent != null
+                        && adjacent.containsPlayersUnitsWithModelCondition(player, UnitModel::getIsShip));
     }
 }

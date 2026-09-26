@@ -15,11 +15,12 @@ import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import org.apache.commons.lang3.function.Consumers;
 import ti4.discord.interactions.buttons.Buttons;
 import ti4.discord.interactions.buttons.handlers.faction.homebrew.beans.natau.NatauAbilityHandler;
-import ti4.discord.interactions.buttons.handlers.faction.homebrew.beans.netrunners.NetrunnersAbilitiesHandler;
 import ti4.discord.interactions.buttons.handlers.faction.homebrew.beans.netrunners.NetrunnersFactionTechsHandler;
 import ti4.discord.interactions.buttons.handlers.faction.homebrew.theodisi.Oblivion.OblivionAbilityHandler;
+import ti4.discord.interactions.buttons.handlers.faction.homebrew.theodisi.Revenant.RevenantPromissoryHandler;
 import ti4.discord.interactions.buttons.handlers.faction.homebrew.theodisi.Verydith.VerydithPromissoryHandler;
 import ti4.discord.interactions.buttons.handlers.faction.homebrew.theodisi.Veylor.VeylorAbilitiesHandler;
+import ti4.discord.interactions.buttons.handlers.unit.monuments.MonumentsPoKButtonHandler;
 import ti4.game.Game;
 import ti4.game.Leader;
 import ti4.game.Planet;
@@ -166,6 +167,7 @@ public final class StatusHelper {
         game.setPhaseOfGame("statusScoring");
         VeylorAbilitiesHandler.returnUnassignedTightSchedulingAgendas(game);
         VerydithPromissoryHandler.returnPactRenewedAtStartOfStatus(game);
+        RevenantPromissoryHandler.returnRebrithAtStartOfStatus(game);
         GameEventService.commit(game, GameEventType.PHASE_STARTED, null, Map.of("phase", "status"));
         GameEventDraft.open(game);
         game.setStoredValue("startTimeOfRound" + game.getRound() + "StatusScoring", System.currentTimeMillis() + "");
@@ -510,9 +512,7 @@ public final class StatusHelper {
         if (game.getRealPlayers().stream().anyMatch(player -> player.hasTech("benetrunnersdm"))) {
             NetrunnersFactionTechsHandler.resolveDataMining(game);
         }
-        if (game.getRealPlayers().stream().anyMatch(player -> player.hasAbility("ransomware"))) {
-            NetrunnersAbilitiesHandler.offerRansomwareButtons(game);
-        }
+        MonumentsPoKButtonHandler.sendSpireOfIxthButtons(game);
 
         for (Player player : game.getRealPlayers()) {
             List<String> pns = new ArrayList<>(player.getPromissoryNotesInPlayArea());
@@ -737,6 +737,10 @@ public final class StatusHelper {
                     int remaining = game.changeCommsOnPlanet(1, planet.getName());
 
                     String msg = "A commodity was placed upon the Monument to the Ages at " + planet.getName() + ".";
+                    // TODO FOG LEAK: unconditionally reveals this planet's identity/location to
+                    // game.getMainGameChannel()
+                    // even in FoW games, regardless of what any player has actually explored. Should route through a
+                    // fog-aware channel helper (e.g. GMService/FoWHelper) when game.isFowMode().
                     MessageHelper.sendMessageToChannel(game.getMainGameChannel(), msg);
                     if (remaining % 3 == 0) {
                         String msg2 = "The Monument to the Ages on the planet of "

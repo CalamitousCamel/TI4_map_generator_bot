@@ -5,9 +5,12 @@ import lombok.experimental.UtilityClass;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import org.apache.commons.lang3.StringUtils;
+import ti4.discord.interactions.buttons.handlers.actioncards.theodisi.MirrorShieldingLLButtonHandler;
 import ti4.discord.interactions.buttons.handlers.faction.homebrew.beans.Iron.IronLeadersHandler;
 import ti4.discord.interactions.buttons.handlers.faction.homebrew.beans.ashen.AshenUnitHandler;
 import ti4.discord.interactions.buttons.handlers.faction.homebrew.theodisi.Ponthous.*;
+import ti4.discord.interactions.buttons.handlers.faction.homebrew.theodisi.Vanguard.VanguardTechHandler;
+import ti4.discord.interactions.buttons.handlers.faction.homebrew.theodisi.Vanguard.VanguardUnitHandler;
 import ti4.discord.interactions.routing.ButtonHandler;
 import ti4.game.Game;
 import ti4.game.Player;
@@ -69,6 +72,9 @@ class AssignHitsButtonHandlers {
                             return;
                         }
                         DestroyUnitService.destroyUnit(event, tile, game, unit, combat, state);
+                        if ("spacecombat".equals(assignHitsType)) {
+                            VanguardUnitHandler.recordSpaceCombatHitAssignment(game, player, tile, amt);
+                        }
                         IronLeadersHandler.checkCommanderUnlockAfterCombat(game, tile, holder, assignHitsType);
                     }
 
@@ -206,6 +212,11 @@ class AssignHitsButtonHandlers {
                     UnitHolder holder =
                             planetName != null ? tile.getUnitHolderFromPlanet(planetName) : tile.getSpaceUnitHolder();
                     if (holder != null) holder.addDamagedUnit(Units.getUnitKey(type, player.getColorID()), amt);
+                    UnitModel sustainedUnit = player.getUnitFromUnitKey(Units.getUnitKey(type, player.getColorID()));
+                    boolean flagbearerSustained = holder == tile.getSpaceUnitHolder()
+                            && sustainedUnit != null
+                            && "vanguard_flagship".equals(sustainedUnit.getId());
+                    VanguardTechHandler.resolveEnhancedPlating(event, game, player, tile, holder, type);
                     if (holder == tile.getSpaceUnitHolder() && type == UnitType.Fighter) {
                         PonthousUnitHandler.consumeTemporaryFighterSustain(game, player, tile, amt);
                     }
@@ -219,11 +230,34 @@ class AssignHitsButtonHandlers {
                                     ? " on " + holder.getRepresentation(game)
                                     : " in tile " + tile.getRepresentationForButtons(game, player))
                             + ".";
-                    if (player.hasTech("nes"))
-                        msg += "\n> These sustains cancel 2 hits due to _Non-Euclidean Shielding_.";
+                    boolean cancelsTwoHits =
+                            player.hasTech("nes") || (player.ownsUnit("kryxos_flagship3") && type == UnitType.Flagship);
+                    if ("spacecombat".equals(getAssignHitsType(game, player))) {
+                        VanguardUnitHandler.recordSpaceCombatHitAssignment(
+                                game, player, tile, cancelsTwoHits ? amt * 2 : amt);
+                    }
+                    if (cancelsTwoHits) {
+                        String sustainSource = player.hasTech("nes")
+                                ? "_Non-Euclidean Shielding_"
+                                : "the Ultimate Evolution III (the Kryxos flagship)";
+                        msg += "\n> These SUSTAIN DAMAGE uses cancel 2 hits due to " + sustainSource + ".";
+                    }
                     String assignHitsType = getAssignHitsType(game, player);
+                    if ("spacecombat".equals(assignHitsType) || "groundcombat".equals(assignHitsType)) {
+                        MirrorShieldingLLButtonHandler.recordCancelledHits(
+                                game, player, tile, cancelsTwoHits ? amt * 2 : amt);
+                    }
                     if (assignHitsType.contains("combat")) {
                         AshenUnitHandler.offerAshfallEngineOnSustain(event, game, player, tile, holder, type);
+                    }
+                    if (flagbearerSustained
+                            && VanguardUnitHandler.offerFlagbearerAfterManualSustain(event, game, player, tile)) {
+                        MessageHelper.sendMessageToChannel(event.getMessageChannel(), msg);
+                        FOWCombatThreadMirroring.mirrorMessage(event, game, msg);
+                        for (int x = 0; x < amt; x++) {
+                            ButtonHelperCommanders.resolveLetnevCommanderCheck(player, game, event);
+                        }
+                        return;
                     }
                     List<Button> systemButtons =
                             ButtonHelper.getButtonsForRemovingAllUnitsInSystem(player, game, tile, assignHitsType);
