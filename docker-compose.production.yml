@@ -41,6 +41,7 @@ services:
       ROLLBAR_CODE_VERSION: ${ROLLBAR_CODE_VERSION}
       ROLLBAR_ENVIRONMENT: ${ROLLBAR_ENVIRONMENT}
       TI4_ULTIMATE_STATISTICS_API_KEY: ${TI4_ULTIMATE_STATISTICS_API_KEY}
+      WEBSITE_BASE_URL: ${WEBSITE_BASE_URL:-https://asyncti4.com}
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8081/api/public/ping >/dev/null 2>&1"]
       interval: 2s

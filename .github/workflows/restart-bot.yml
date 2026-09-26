@@ -44,6 +44,7 @@ jobs:
           export HOST_TI4_SAVES_DIR="${{ vars.HOST_TI4_SAVES_DIR }}"
           export HOST_TI4_REPO_DIR="${{ vars.HOST_TI4_REPO_DIR }}"
           export GUILDID_LIST="${{ vars.GUILDID_LIST }}"
+          export WEBSITE_BASE_URL="${{ vars.WEBSITE_BASE_URL }}"
           export COMPOSE_PROJECT_NAME="ti4-bot"
           export IMAGE_REPOSITORY="${{ env.IMAGE_REPOSITORY }}"
           export IMAGE_TAG="master"

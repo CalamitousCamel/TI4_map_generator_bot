@@ -14,7 +14,7 @@ import tools.jackson.databind.ObjectWriter;
 
 public final class GlobalSettings {
 
-    // Adding an enum here will make it show up as an AutoComplete option in the /admin setting setting_name parameter,
+    // Adding an enum here will make it show up as an AutoComplete option in the /developer setting setting_name parameter,
     // and will allow you to get the setting easier
     public enum ImplementedSettings {
         DEBUG, // When true, additional show additional debug messages

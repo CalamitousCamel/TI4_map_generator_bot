@@ -36,6 +36,7 @@ import ti4.service.emoji.ExploreEmojis;
 import ti4.service.emoji.FactionEmojis;
 import ti4.service.emoji.LeaderEmojis;
 import ti4.service.emoji.UnitEmojis;
+import ti4.website.AsyncTi4WebsiteHelper;
 
 /**
  * Shared combat helper logic for replay candidate filtering, scoring inputs, and Lazax replay text generation.
@@ -491,7 +492,7 @@ public class LazaxCombatSupport {
             Game game, Tile tile, Player attacker, Player defender, String activePlayerSummary) {
         return "## Lazax Candidate Recorded\n"
                 + "**Game:** `" + game.getName() + "`\n"
-                + "**Game " + game.getName() + ":** [Open Game](https://asyncti4.com/game/" + game.getName()
+                + "**Game " + game.getName() + ":** [Open Game](" + AsyncTi4WebsiteHelper.getGameUrl(game.getName())
                 + ")\n"
                 + activePlayerSummary
                 + "**System:** " + tile.getRepresentationForButtons() + "\n"

@@ -23,6 +23,7 @@ import ti4.helpers.StringHelper;
 import ti4.helpers.TIGLHelper;
 import ti4.logging.BotLogger;
 import ti4.message.MessageHelper;
+import ti4.website.AsyncTi4WebsiteHelper;
 
 @UtilityClass
 public class RematchService {
@@ -150,7 +151,8 @@ public class RematchService {
                 + "### __Other helpful commands:__\n"
                 + "> `/game replace` to replace a player in the game with a new one\n";
         MessageHelper.sendMessageToChannelAndPin(botThread, botGetStartedMessage);
-        MessageHelper.sendMessageToChannelAndPin(botThread, "Website Live Map: https://asyncti4.com/game/" + newName);
+        MessageHelper.sendMessageToChannelAndPin(
+                botThread, "Website Live Map: " + AsyncTi4WebsiteHelper.getGameUrl(newName));
 
         if (game.isCompetitiveTIGLGame()) TIGLHelper.initializeTIGLGame(newGame);
 

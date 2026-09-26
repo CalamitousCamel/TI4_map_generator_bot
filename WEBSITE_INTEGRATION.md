@@ -2,6 +2,12 @@
 
 This document describes how the TI4 Map Generator Bot integrates with the AsyncTI4 website UI.
 
+## Website Links
+
+Links the bot posts to the website (the "Website View" map button, "Move on Map", rematch and contest messages) are built by `AsyncTi4WebsiteHelper.getGameUrl` from the `WEBSITE_BASE_URL` environment variable. It defaults to `https://asyncti4.com`; set it to the origin of your own deployment (no trailing slash) to point those links elsewhere. Production deploys read it from the `WEBSITE_BASE_URL` repository variable.
+
+The "Website View" button only appears when the `upload_data_to_web_server` global setting is true (`/developer setting`). When it is false the bot instead posts an "Open in browser" button that opens the map PNG attachment.
+
 ## Image Asset Pipeline
 
 Game assets (faction banners, planet images, system tiles, etc.) are automatically uploaded to a CloudFront-backed S3 bucket and served to the website.

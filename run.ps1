@@ -9,6 +9,7 @@ if (Test-Path "$PSScriptRoot\run.secrets.ps1") {
 
 $env:DB_PATH = "./storage"
 $env:RESOURCE_PATH = "./src/main/resources"
+if (-not $env:WEBSITE_BASE_URL) { $env:WEBSITE_BASE_URL = "https://ti4.thecastle.dev" }
 
 $jar_with_deps = "./target/TI4_map_generator_discord_bot-1.0-SNAPSHOT-jar-with-dependencies.jar"
 

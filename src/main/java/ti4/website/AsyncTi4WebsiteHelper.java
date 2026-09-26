@@ -19,6 +19,25 @@ import ti4.website.model.WebsiteOverlay;
 @UtilityClass
 public class AsyncTi4WebsiteHelper {
 
+    private static final String DEFAULT_WEBSITE_BASE_URL = "https://asyncti4.com";
+
+    /** Base URL of the website UI (no trailing slash), from the WEBSITE_BASE_URL env var. */
+    public static String getWebsiteBaseUrl() {
+        String configured = System.getenv("WEBSITE_BASE_URL");
+        if (configured == null || configured.isBlank()) return DEFAULT_WEBSITE_BASE_URL;
+        return configured.strip().replaceAll("/+$", "");
+    }
+
+    /** Link to a game's page on the website UI. */
+    public static String getGameUrl(String gameName) {
+        return getWebsiteBaseUrl() + "/game/" + gameName;
+    }
+
+    /** Link to a game's new UI page on the website. */
+    public static String getGameNewUiUrl(String gameName) {
+        return getGameUrl(gameName) + "/newui";
+    }
+
     public static boolean uploadsEnabled() {
         return GlobalSettings.getSetting(
                 GlobalSettings.ImplementedSettings.UPLOAD_DATA_TO_WEB_SERVER.toString(), Boolean.class, Boolean.FALSE);

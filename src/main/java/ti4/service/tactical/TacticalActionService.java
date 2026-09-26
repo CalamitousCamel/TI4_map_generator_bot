@@ -39,6 +39,7 @@ import ti4.service.fow.LoreService;
 import ti4.service.leader.CommanderUnlockCheckService;
 import ti4.service.planet.FlipTileService;
 import ti4.service.tactical.movement.MoveAbilityButtons;
+import ti4.website.AsyncTi4WebsiteHelper;
 
 @UtilityClass
 public class TacticalActionService {
@@ -364,8 +365,7 @@ public class TacticalActionService {
 
         // Open desktop web UI at the active system (BETA)
         if (!game.isFowMode()) {
-            String baseUrl = "https://asyncti4.com/game/" + game.getName();
-            String url = baseUrl + "/newui";
+            String url = AsyncTi4WebsiteHelper.getGameNewUiUrl(game.getName());
             String target = game.getActiveSystem();
             if (target != null && !target.isEmpty()) {
                 url += "?targetPositionId=" + target;

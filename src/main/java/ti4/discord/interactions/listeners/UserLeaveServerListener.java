@@ -26,6 +26,7 @@ import ti4.service.async.BanCleanupService;
 import ti4.service.emoji.MiscEmojis;
 import ti4.settings.users.UserSettingsManager;
 import ti4.spring.service.deploy.ActiveLeaseService;
+import ti4.website.AsyncTi4WebsiteHelper;
 
 class UserLeaveServerListener extends ListenerAdapter {
 
@@ -136,7 +137,8 @@ class UserLeaveServerListener extends ListenerAdapter {
         Player player = game.getPlayer(user.getId());
 
         // HEADER
-        String websiteLink = String.format("[__[%s](https://asyncti4.com/game/%s)__]", game.getName(), game.getName());
+        String websiteLink =
+                String.format("[__[%s](%s)__]", game.getName(), AsyncTi4WebsiteHelper.getGameUrl(game.getName()));
         String faction = player.getFactionEmoji();
         TextChannel channel = game.getTableTalkChannel();
         String tabletalkLink = String.format("[__[" + channel.getName() + "](%s)__]", channel.getJumpUrl());

@@ -40,6 +40,7 @@ import ti4.helpers.ButtonHelper;
 import ti4.helpers.Constants;
 import ti4.service.combat.CombatRollType;
 import ti4.service.combat.CombatUnitSelectionHelper;
+import ti4.website.AsyncTi4WebsiteHelper;
 
 /**
  * Observes live combats, scores them against the current replay thresholds, and records replay candidates/events.
@@ -485,7 +486,7 @@ public class CombatReplayService {
                 "## Contest Result\n"
                         + winner.getFactionEmoji() + " " + winner.getUserName() + " won the space combat in "
                         + tile.getRepresentationForButtons() + ".\n"
-                        + "Game " + game.getName() + ": [Open Game](https://asyncti4.com/game/" + game.getName()
+                        + "Game " + game.getName() + ": [Open Game](" + AsyncTi4WebsiteHelper.getGameUrl(game.getName())
                         + ")");
         appendSideBetTriggerEvents(
                 candidate, CombatCandidateEventType.RESOLVED, sideBetTriggerService.fromResolution(candidate, winner));
@@ -518,7 +519,7 @@ public class CombatReplayService {
                 CombatReplayTileRenderer.captureUnitStateSnapshot(game, tile.getPosition()),
                 "## Contest Result\nThe space combat in " + tile.getRepresentationForButtons()
                         + " ended in a draw with no ships remaining.\n"
-                        + "Game " + game.getName() + ": [Open Game](https://asyncti4.com/game/" + game.getName()
+                        + "Game " + game.getName() + ": [Open Game](" + AsyncTi4WebsiteHelper.getGameUrl(game.getName())
                         + ")");
     }
 
