@@ -107,6 +107,19 @@ public final class ButtonHelperTwilightsFallActionCards {
             DestroyUnitService.destroyUnit(
                     event, oG, game, key, 1, oG.getUnitHolders().get(uHName), false);
             List<Button> buttons = new ArrayList<>();
+            List<String> colors = new ArrayList<>();
+            for (String tilePos : FoWHelper.getAdjacentTiles(game, tileP, player, false, true)) {
+                Tile tile2 = game.getTileByPosition(tilePos);
+                for (UnitHolder uH : tile2.getUnitHolders().values()) {
+                    for (Player p2 : game.getRealAndEliminatedAndDummyPlayers()) {
+                        if (uH.getUnitCount(UnitType.Infantry, p2.getColor()) > 0
+                                && !p2.getColor().equalsIgnoreCase(color)
+                                && !colors.contains(p2.getColor())) {
+                            colors.add(p2.getColor());
+                        }
+                    }
+                }
+            }
             for (String tilePos : FoWHelper.getAdjacentTiles(game, tileP, player, false, true)) {
                 Tile tile2 = game.getTileByPosition(tilePos);
                 for (UnitHolder uH : tile2.getUnitHolders().values()) {
@@ -120,7 +133,8 @@ public final class ButtonHelperTwilightsFallActionCards {
                             label = "(" + StringUtils.capitalize(p2.getColor()) + ") "
                                     + Helper.getPlanetRepresentation(uH.getName(), game);
                         }
-                        if (uH.getUnitCount(UnitType.Infantry, p2.getColor()) > 0) {
+                        if (uH.getUnitCount(UnitType.Infantry, p2.getColor()) > 0
+                                && (colors.contains(p2.getColor()) || colors.isEmpty())) {
                             buttons.add(Buttons.gray(
                                     player.factionButtonChecker() + "locustOn_" + tilePos + "_" + uH.getName() + "_"
                                             + p2.getColor(),
@@ -178,7 +192,9 @@ public final class ButtonHelperTwilightsFallActionCards {
                 continue;
             }
             buttons.add(Buttons.green(
-                    "manipulateStep2_" + cardID + "_" + p2.getFaction(), p2.getUserName(), p2.fogSafeEmoji()));
+                    "manipulateStep2_" + cardID + "_" + p2.getFaction(),
+                    p2.getFactionNameOrColor(),
+                    p2.fogSafeEmoji()));
         }
         MessageHelper.sendMessageToChannel(
                 game.isVeiledHeartMode() ? player.getCardsInfoThread() : player.getCorrectChannel(),
@@ -263,10 +279,7 @@ public final class ButtonHelperTwilightsFallActionCards {
                 }
             }
         } else {
-            Player activeP = game.getActivePlayer();
-            if (activeP == null) {
-                activeP = player;
-            }
+            Player activeP = ButtonHelperTwilightsFall.spliceInitiator(game, player);
             if (game.isVeiledHeartMode()) {
                 MessageHelper.sendMessageToChannel(
                         activeP.getCorrectChannel(), activeP.getRepresentation() + ", the splice is complete.");
@@ -281,12 +294,13 @@ public final class ButtonHelperTwilightsFallActionCards {
             }
             if (!game.getStoredValue("endTurnWhenSpliceEnds").isEmpty()) {
                 Player p3 = game.getActivePlayer();
-                if (game.getStoredValue("endTurnWhenSpliceEnds").contains(p3.getFaction())) {
+                if (p3 != null && game.getStoredValue("endTurnWhenSpliceEnds").contains(p3.getFaction())) {
                     EndTurnService.endTurnAndUpdateMap(event, game, p3);
                 }
                 game.setStoredValue("endTurnWhenSpliceEnds", "");
             }
             game.removeStoredValue("willParticipateInSplice");
+            game.removeStoredValue("spliceInitiator");
         }
         ButtonHelper.deleteMessage(event);
     }
@@ -348,11 +362,11 @@ public final class ButtonHelperTwilightsFallActionCards {
         String msg = player.getRepresentation() + " has chosen for _"
                 + Mapper.getRelic(relic).getName() + "_, owned by " + p2.getRepresentation() + ", to be _Unravel_'d.";
         if (p2 == player) {
-            if (!FractureService.isFractureInPlay(game)) {
-                FractureService.spawnFracture(event, game);
-                FractureService.spawnIngressTokens(event, game, player, null);
+            FractureService.enterPlayOrExplain(event, game, player, null);
+            // Only offer the move if The Fracture is actually on the board
+            if (FractureService.isFractureInPlay(game)) {
+                TeHelperTechs.initializePlanesplitterStep1(game, player);
             }
-            TeHelperTechs.initializePlanesplitterStep1(game, player);
         } else {
             Integer poIndex =
                     game.addCustomPO("Unravel " + Mapper.getRelic(relic).getName(), 1);
@@ -390,7 +404,7 @@ public final class ButtonHelperTwilightsFallActionCards {
                     p2.factionButtonChecker() + "coerceStep3_" + player.getFaction() + "_" + ability, tech.getName()));
         }
         String msg = p2.getRepresentationUnfogged() + ", please choose the ability you wish to give to "
-                + (game.isFowMode() ? player.getColorIfCanSeeStats(p2) : player.getRepresentationNoPing()) + ".";
+                + FoWHelper.identityOrColorIfCanSeeStats(game, player, p2, player.getRepresentationNoPing()) + ".";
         MessageChannel channel = p2.getCorrectChannel();
         if (game.isVeiledHeartMode()) {
             MessageHelper.sendMessageToChannel(
@@ -421,7 +435,7 @@ public final class ButtonHelperTwilightsFallActionCards {
         player.removeTech(ability1);
         p2.addTech(ability1);
         String msg = player.getRepresentation() + " has lost _" + tech1.getName() + "_ to "
-                + (game.isFowMode() ? p2.getColorIfCanSeeStats(player) : p2.getFactionNameOrColor()) + ".";
+                + FoWHelper.identityOrColorIfCanSeeStats(game, p2, player, p2.getFactionNameOrColor()) + ".";
         String msg2 = p2.getRepresentation() + ", you gained _" + tech1.getName() + "_ from "
                 + player.getFactionNameOrColor() + ".";
         MessageHelper.sendMessageToChannel(p2.getCorrectChannel(), msg2);
@@ -574,7 +588,7 @@ public final class ButtonHelperTwilightsFallActionCards {
                 + tech2.getName() + "_ via a _Transpose_ with " + p2.getFactionNameOrColor() + ".";
         String msg2 = p2.getRepresentationUnfogged() + ", you exchanged _" + tech2.getName() + "_ for _"
                 + tech1.getName() + "_ via a _Transpose_ with "
-                + (game.isFowMode() ? player.getColorIfCanSeeStats(p2) : player.getFactionNameOrColor()) + ".";
+                + FoWHelper.identityOrColorIfCanSeeStats(game, player, p2, player.getFactionNameOrColor()) + ".";
         MessageHelper.sendMessageToChannel(p2.getCorrectChannel(), msg2);
         MessageHelper.sendMessageToChannel(player.getCorrectChannel(), msg);
 
@@ -930,13 +944,15 @@ public final class ButtonHelperTwilightsFallActionCards {
     public static void resolveStarFlare(Game game, Player player, ButtonInteractionEvent event) {
         List<Button> buttons = new ArrayList<>();
         String msg = player.getRepresentation() + ", please choose the supernova you wish to have erupt.";
+        // isTwilightKart is Deprecated.
+        // remove entire if-statement (and just do the else-body) once isTwilightKart is removed
         if (game.isTwilightKart()) {
             for (Tile tile : game.getTileMap().values()) {
                 if (tile.getPlanetUnitHolders().isEmpty()
                         && FoWHelper.playerHasActualShipsInSystem(player, tile)
                         && !tile.getTileModel().hasWormhole()
-                        && !tile.getPosition().contains("frac")
-                        && tile.getSpaceStations().isEmpty()) {
+                        && !tile.isFracture()
+                        && tile.getSpaceStations(game).isEmpty()) {
                     buttons.add(
                             Buttons.gray("starFlareTKStep2_" + tile.getPosition(), tile.getRepresentationForButtons()));
                 }
@@ -993,6 +1009,7 @@ public final class ButtonHelperTwilightsFallActionCards {
         ButtonHelper.deleteMessage(event);
     }
 
+    // isTwilightKart is Deprecated. remove entire starFlareTKStep2 function once isTwilightKart is removed
     @ButtonHandler("starFlareTKStep2_")
     public static void starFlareTKStep2(Game game, Player player, ButtonInteractionEvent event, String buttonID) {
         Tile tileOg = game.getTileByPosition(buttonID.split("_")[1]);

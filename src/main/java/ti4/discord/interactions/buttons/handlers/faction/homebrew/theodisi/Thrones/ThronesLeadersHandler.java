@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.List;
 import lombok.experimental.UtilityClass;
 import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.events.interaction.GenericInteractionCreateEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import ti4.discord.interactions.buttons.Buttons;
@@ -34,7 +35,7 @@ public class ThronesLeadersHandler {
     private static final String SELECT_TARGET_PREFIX = "thronesAgentUseOn_";
     private static final String SELECT_SHIP_PREFIX = "thronesAgentChooseShip_";
     private static final String PLACE_SHIP_PREFIX = "thronesAgentPlaceShip_";
-    private static final String CHOOSE_THRONE = "chooseThronePlanet_";
+    private static final String CHOOSE_THRONE = "chooseThronePlanetForHero_";
     private static final List<String> THRONE_PLANETS = List.of("cineron", "gyraxis", "lethara", "skarnath");
     private static final String DONE_CHOOSING_THRONE = "doneChoosingThronePlanets";
 
@@ -111,7 +112,7 @@ public class ThronesLeadersHandler {
         MessageHelper.sendMessageToChannelWithButtons(
                 target.getCorrectChannel(),
                 target.getRepresentationUnfogged()
-                        + ", please choose which destroyed ship Malrik the Defiler, the Thrones agent, should place.",
+                        + ", please choose which destroyed unit Malrik the Defiler, the Thrones agent, should place.",
                 buttons);
         MessageHelper.sendEphemeralMessageToEventChannel(
                 event, "Sent ship-choice buttons to " + target.getRepresentationUnfoggedNoPing() + ".");
@@ -230,7 +231,10 @@ public class ThronesLeadersHandler {
     }
 
     private static boolean isEligibleShipModel(UnitModel unitModel) {
-        return unitModel != null && unitModel.getIsShip();
+        return unitModel != null
+                && !unitModel.getIsStructure()
+                && unitModel.getCost()
+                        <= 4; // USed to be ship only now its unit, easier to change this than remove a ton of stuff
     }
 
     private static List<Tile> getEligibleDestinationTiles(Game game, Player target) {
@@ -278,9 +282,19 @@ public class ThronesLeadersHandler {
         }
         buttons.add(Buttons.red(player.factionButtonChecker() + DONE_CHOOSING_THRONE, "Done Choosing Thrones"));
 
-        MessageHelper.sendMessageToChannelWithButtons(
+        List<MessageEmbed> thronesEmbed = new ArrayList<>();
+        for (String planet : THRONE_PLANETS) {
+            if (game.getTileFromPlanet(planet) != null) {
+                continue;
+            }
+
+            thronesEmbed.add(Mapper.getPlanet(planet).getRepresentationEmbed());
+        }
+
+        MessageHelper.sendMessageToChannelWithEmbedsAndButtons(
                 event.getMessageChannel(),
                 player.getRepresentation() + ", please choose the 2 Throne planets to place in your home system.",
+                thronesEmbed,
                 buttons);
     }
 

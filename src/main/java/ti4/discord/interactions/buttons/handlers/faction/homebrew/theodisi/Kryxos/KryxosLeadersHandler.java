@@ -1,9 +1,11 @@
 package ti4.discord.interactions.buttons.handlers.faction.homebrew.theodisi.Kryxos;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import lombok.experimental.UtilityClass;
 import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.events.interaction.GenericInteractionCreateEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import ti4.discord.interactions.buttons.Buttons;
 import ti4.discord.interactions.routing.ButtonHandler;
@@ -20,7 +22,10 @@ import ti4.service.tech.PlayerTechService;
 public class KryxosLeadersHandler {
     private static final String RETURN_TECH = "returnTechForKryxosAgent_";
     private static final String RESEARCH_UNIT_UPGRADE = "researchKryxosAgentUUTech_";
+    private static final String SELECT_KRYXOS_HERO_UNIT_UPGRADE = "selectKryxosHeroUnitUpgrade_";
+    private static final String GAIN_KRYXOS_HERO_TECH = "gainKryxosHeroTech_";
 
+    // Agent
     public static void startKryxosAgent(Game game, Player target) {
         if (game == null || target == null) {
             return;
@@ -36,14 +41,14 @@ public class KryxosLeadersHandler {
 
         if (buttons.isEmpty()) {
             MessageHelper.sendMessageToChannel(
-                    target.getCardsInfoThread(),
+                    game.getActionsChannel(),
                     target.getRepresentationUnfogged()
                             + " has no non-faction technology available to return for Dravok Veyl.");
             return;
         }
 
         MessageHelper.sendMessageToChannelWithButtons(
-                target.getCardsInfoThread(),
+                game.getActionsChannel(),
                 target.getRepresentationUnfogged()
                         + ", please choose the non-faction technology to return for Dravok Veyl, the Kryxos agent.",
                 buttons);
@@ -109,6 +114,100 @@ public class KryxosLeadersHandler {
         }
 
         ButtonHelper.deleteMessage(event);
-        PlayerTechService.getTech(game, player, event, "getTech_" + techId + "__noPay");
+        PlayerTechService.getTech(game, player, event, "getTech_" + techId);
+    }
+
+    // Hero
+    public static void startKryxosHero(GenericInteractionCreateEvent event, Game game, Player player) {
+        if (game == null || player == null) {
+            return;
+        }
+
+        List<Button> buttons = player.getTechs().stream()
+                .map(Mapper::getTech)
+                .filter(Objects::nonNull)
+                .filter(TechnologyModel::isUnitUpgrade)
+                .map(tech -> Buttons.gray(
+                        player.factionButtonChecker() + SELECT_KRYXOS_HERO_UNIT_UPGRADE + tech.getAlias(),
+                        tech.getName(),
+                        tech.getSingleTechEmoji()))
+                .toList();
+
+        if (buttons.isEmpty()) {
+            MessageHelper.sendMessageToChannel(
+                    event.getMessageChannel(),
+                    player.getRepresentation() + " has no owned unit upgrade technology to select for Zorath Ultimus.");
+            return;
+        }
+
+        MessageHelper.sendMessageToChannelWithButtons(
+                event.getMessageChannel(),
+                player.getRepresentation()
+                        + ", choose 1 of your unit upgrade technologies. For each prerequisite on it,"
+                        + " gain 1 unowned technology of that color due to Zorath Ultimus, the Kryxos hero.",
+                buttons);
+    }
+
+    @ButtonHandler(SELECT_KRYXOS_HERO_UNIT_UPGRADE)
+    public static void selectKryxosHeroUnitUpgrade(
+            ButtonInteractionEvent event, Game game, Player player, String buttonID) {
+        String techID = buttonID.substring(SELECT_KRYXOS_HERO_UNIT_UPGRADE.length());
+        TechnologyModel tech = Mapper.getTech(techID);
+        if (game == null || player == null || tech == null || !tech.isUnitUpgrade() || !player.hasTech(techID)) {
+            ButtonHelper.deleteMessage(event);
+            return;
+        }
+
+        for (char prerequisite : tech.getRequirements().orElse("").toLowerCase().toCharArray()) {
+            String techType =
+                    switch (prerequisite) {
+                        case 'b' -> TechnologyModel.TechnologyType.PROPULSION.toString();
+                        case 'g' -> TechnologyModel.TechnologyType.BIOTIC.toString();
+                        case 'y' -> TechnologyModel.TechnologyType.CYBERNETIC.toString();
+                        case 'r' -> TechnologyModel.TechnologyType.WARFARE.toString();
+                        default -> "";
+                    };
+            if (techType.isEmpty()) {
+                continue;
+            }
+            List<TechnologyModel> techs =
+                    new ArrayList<>(ListTechService.getAllTechOfAType(game, techType, player, false, false));
+            List<Button> buttons = new ArrayList<>();
+            for (TechnologyModel gainableTech : techs) {
+                String techButtonID = player.factionButtonChecker() + GAIN_KRYXOS_HERO_TECH + gainableTech.getAlias();
+                String emoji = gainableTech.getCondensedReqsEmojis(true);
+                buttons.add(
+                        switch (gainableTech.getFirstType()) {
+                            case PROPULSION -> Buttons.blue(techButtonID, gainableTech.getName(), emoji);
+                            case BIOTIC -> Buttons.green(techButtonID, gainableTech.getName(), emoji);
+                            case WARFARE -> Buttons.red(techButtonID, gainableTech.getName(), emoji);
+                            default -> Buttons.gray(techButtonID, gainableTech.getName(), emoji);
+                        });
+            }
+            if (buttons.isEmpty()) {
+                MessageHelper.sendMessageToChannel(
+                        event.getMessageChannel(),
+                        player.getRepresentationNoPing() + " has no unowned " + techType + " technology to gain.");
+                continue;
+            }
+            MessageHelper.sendMessageToChannelWithButtons(
+                    event.getMessageChannel(),
+                    player.getRepresentation() + ", gain 1 " + techType + " technology for a prerequisite on "
+                            + tech.getNameRepresentation() + ".",
+                    buttons);
+        }
+        ButtonHelper.deleteMessage(event);
+    }
+
+    @ButtonHandler(GAIN_KRYXOS_HERO_TECH)
+    public static void gainKryxosHeroTech(ButtonInteractionEvent event, Game game, Player player, String buttonID) {
+        String techID = buttonID.substring(GAIN_KRYXOS_HERO_TECH.length());
+        TechnologyModel tech = Mapper.getTech(techID);
+        if (game == null || player == null || tech == null || player.hasTech(techID)) {
+            ButtonHelper.deleteMessage(event);
+            return;
+        }
+        PlayerTechService.addTech(event, game, player, techID);
+        ButtonHelper.deleteMessage(event);
     }
 }
